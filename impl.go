@@ -2,16 +2,12 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"strings"
 
-	"cuelang.org/go/cue"
-	"cuelang.org/go/cue/ast"
-	"cuelang.org/go/cue/format"
+	"cuelang.org/go/cmd/cue/cmd"
 	"cuelang.org/go/cue/load"
-	"cuelang.org/go/cue/token"
-	"github.com/cue-sh/playground/internal/cuelang_org_go_internal/encoding"
-	"github.com/cue-sh/playground/internal/cuelang_org_go_internal/filetypes"
 )
 
 type function string
@@ -45,86 +41,39 @@ func handleCUECompile(in input, fn function, out output, inputVal string) (strin
 		return "", fmt.Errorf("function %q is not implemented", fn)
 	}
 
-	switch in {
-	case inputCUE, inputJSON, inputYaml:
-	default:
-		return "", fmt.Errorf("unknown input type: %v", in)
-	}
-	loadCfg := &load.Config{
-		Stdin:      strings.NewReader(inputVal),
-		Dir:        "/",
-		ModuleRoot: "/",
-		Overlay: map[string]load.Source{
-			"/cue.mod/module.cue": load.FromString(`module: "example.com"`),
-		},
-	}
-	builds := load.Instances([]string{string(in) + ":", "-"}, loadCfg)
-	if err := builds[0].Err; err != nil {
-		return "", fmt.Errorf("failed to load: %v", err)
-	}
-
-	insts := cue.Build(builds)
-	inst := insts[0]
-	if err := inst.Err; err != nil {
-		return "", fmt.Errorf("failed to build: %v", err)
-	}
-	v := insts[0].Value()
+	args := []string{"eval"}
 
 	switch out {
 	case outputCUE, outputJSON, outputYaml:
+		args = append(args, "--out", string(out))
 	default:
 		return "", fmt.Errorf("unknown ouput type: %v", out)
 	}
-	f, err := filetypes.ParseFile(string(out)+":-", filetypes.Export)
+
+	switch in {
+	case inputCUE, inputJSON, inputYaml:
+		args = append(args, string(in), "/input.cue")
+	default:
+		return "", fmt.Errorf("unknown input type: %v", in)
+	}
+
+	c, err := cmd.New(args)
+	root := "/"
+	c.Dir = &root
+	c.ModuleRoot = &root
+	c.Overlay = map[string]load.Source{
+		"/cue.mod/module.cue": load.FromString(`module: "cue.playground"`),
+		"/input.cue":          load.FromString(inputVal),
+	}
 	if err != nil {
-		panic(err)
+		return "", fmt.Errorf("failed to parse command from args [%v]: %v", strings.Join(args, " "), err)
 	}
 	var outBuf bytes.Buffer
-	encConf := &encoding.Config{
-		Out: &outBuf,
-	}
-	e, err := encoding.NewEncoder(f, encConf)
-	if err != nil {
-		return "", fmt.Errorf("failed to build encoder: %v", err)
-	}
-
-	syn := []cue.Option{
-		cue.Final(), // for backwards compatibility
-		cue.Definitions(true),
-	}
-	var opts []format.Option
-	switch out {
-	case outputCUE:
-		if fn == functionEvalConcrete {
-			syn = append(syn, cue.Concrete(true))
-		}
-		opts = append(opts, format.TabIndent(true))
-	case outputJSON, outputYaml:
-		opts = append(opts,
-			format.TabIndent(false),
-			format.UseSpaces(2),
-		)
-	}
-	encConf.Format = opts
-	synF := getSyntax(v, syn)
-	if err := e.EncodeFile(synF); err != nil {
-		return "", fmt.Errorf("failed to encode: %v", err)
+	c.SetOutput(&outBuf)
+	if err := c.Run(context.Background()); err != nil {
+		// Return this error "naked" because it contains the actual
+		// error we want to show to the user
+		return "", err
 	}
 	return outBuf.String(), nil
-}
-
-// getSyntax is copied from cmd/cue/cmd/eval.go
-func getSyntax(v cue.Value, opts []cue.Option) *ast.File {
-	n := v.Syntax(opts...)
-	switch x := n.(type) {
-	case *ast.File:
-		return x
-	case *ast.StructLit:
-		return &ast.File{Decls: x.Elts}
-	case ast.Expr:
-		ast.SetRelPos(x, token.NoSpace)
-		return &ast.File{Decls: []ast.Decl{&ast.EmbedDecl{Expr: x}}}
-	default:
-		panic("unreachable")
-	}
 }
