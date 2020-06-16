@@ -13,10 +13,9 @@ var testTable = []struct {
 	OutVal string
 	Err    string
 }{
-	{inputCUE, functionEval, outputCUE, "", "\n", ""},
-	{inputCUE, functionEval, outputCUE, "a: b: 5\na: c: 4", "a: {\n\tb: 5\n\tc: 4\n}\n", ""},
-	{inputCUE, functionEval, outputJSON, "test: 5", "{\n    \"test\": 5\n}\n", ""},
-	{inputJSON, functionEval, outputCUE, "{\n \"test\": 5\n}\n", "test: 5", ""},
+	{inputCUE, functionExport, outputCUE, "", "\n", ""},
+	{inputCUE, functionExport, outputCUE, "a: b: 5\na: c: 4", "a: {\n\tb: 5\n\tc: 4\n}\n", ""},
+	{inputCUE, functionExport, outputJSON, "test: 5", "{\n    \"test\": 5\n}\n", ""},
 }
 
 func TestHandleCUECompile(t *testing.T) {
