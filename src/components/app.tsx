@@ -51,13 +51,13 @@ class OutputOption extends Option {
 
 let inputOptions : InputOption[] = [
 	new InputOption("CUE", "cue"),
-	new InputOption("JSON", "json"),
-	new InputOption("Yaml", "yaml"),
+	// new InputOption("JSON", "json"),
+	// new InputOption("Yaml", "yaml"),
 ];
 
 let funcOptions : FuncOption[] = [
-	new FuncOption("eval", "eval"),
-	new FuncOption("eval -c", "eval-c"),
+	new FuncOption("export", "export"),
+	new FuncOption("def", "def"),
 ];
 
 let outputOptions : OutputOption[] = [
@@ -94,6 +94,20 @@ export class App extends React.PureComponent<AppProps, AppState> {
 	}
 
 	render() {
+		// Inputs can be whatever. Funcs are a function of input. Outputs are a function of funcs
+		// This logic belongs elsewhere :)
+		let inputs = inputOptions;
+		let funcs = new Array<FuncOption>();
+		funcs.push(funcOptions[0]);
+		if (this.state.Input.key == "cue") {
+			funcs.push(funcOptions[1]);
+		}
+		let outputs = outputOptions;
+		let showOutputs = "inline-block";
+		if (this.state.Func.key == "def") {
+			showOutputs = "none";
+		}
+
 		return (
 			<div className="grid-container">
 				<div className="header">
@@ -105,7 +119,7 @@ export class App extends React.PureComponent<AppProps, AppState> {
 							</button>
 							<div className="dropdown-menu dropdown-menu-right" aria-labelledby="inputMenuButton">
 								{[
-									inputOptions.map((v) => <a key={v.key} className="dropdown-item" href={v.Hash(this.state)}>{v.name}</a>)
+									inputs.map((v) => <a key={v.key} className="dropdown-item" href={v.Hash(this.state)}>{v.name}</a>)
 								]}
 							</div>
 						</div>
@@ -115,17 +129,17 @@ export class App extends React.PureComponent<AppProps, AppState> {
 							</button>
 							<div className="dropdown-menu dropdown-menu-right" aria-labelledby="funcMenuButton">
 								{[
-									funcOptions.map((v) => <a key={v.key} className="dropdown-item" href={v.Hash(this.state)}>{v.name}</a>)
+									funcs.map((v) => <a key={v.key} className="dropdown-item" href={v.Hash(this.state)}>{v.name}</a>)
 								]}
 							</div>
 						</div>
-						<div className="dropdown" style={{ display: "inline-block" }}>
+						<div className="dropdown" style={{ display: showOutputs }}>
 							<button className="btn btn-secondary btn-sm dropdown-toggle" type="button" id="outputMenuButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
 								Output: {this.state.Output.name}
 							</button>
 							<div className="dropdown-menu dropdown-menu-right" aria-labelledby="outputMenuButton">
 								{[
-									outputOptions.map((v) => <a key={v.key} className="dropdown-item" href={v.Hash(this.state)}>{v.name}</a>)
+									outputs.map((v) => <a key={v.key} className="dropdown-item" href={v.Hash(this.state)}>{v.name}</a>)
 								]}
 							</div>
 						</div>
@@ -223,7 +237,6 @@ export class App extends React.PureComponent<AppProps, AppState> {
 		let input = inputOptions[0];
 		let func = funcOptions[0];
 		let output = outputOptions[0];
-		console.log(funcStr);
 		for (let o of inputOptions) {
 			if (inputStr === o.key) {
 				input = o;
@@ -237,6 +250,15 @@ export class App extends React.PureComponent<AppProps, AppState> {
 		for (let o of outputOptions) {
 			if (outputStr === o.key) {
 				output = o;
+			}
+		}
+		// TODO: move this validation logic elsewhere
+		if (func.key == "def") {
+			if (input.key != "cue") {
+				func = funcOptions[0];
+			}
+			if (output.key != "cue") {
+				output = outputOptions[0];
 			}
 		}
 		if (input.key !== inputStr || func.key !== funcStr || output.key !== outputStr) {
@@ -253,7 +275,7 @@ export class App extends React.PureComponent<AppProps, AppState> {
 		this.updateOutput();
 	}
 
-	private updateOutput(): void {
+	private updateOutput() : void {
 		if (this.props.WasmAPI.CUECompile === undefined || this.lhsEditor === undefined) {
 			return;
 		}

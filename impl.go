@@ -17,8 +17,8 @@ import (
 type function string
 
 const (
-	functionEval         function = "eval"
-	functionEvalConcrete function = "eval-c"
+	functionExport function = "export"
+	functionDef    function = "def"
 )
 
 type input string
@@ -40,7 +40,7 @@ const (
 func handleCUECompile(in input, fn function, out output, inputVal string) (string, error) {
 	// TODO implement more functions
 	switch fn {
-	case functionEval, functionEvalConcrete:
+	case functionExport, functionDef:
 	default:
 		return "", fmt.Errorf("function %q is not implemented", fn)
 	}
@@ -89,13 +89,15 @@ func handleCUECompile(in input, fn function, out output, inputVal string) (strin
 	}
 
 	syn := []cue.Option{
-		cue.Final(), // for backwards compatibility
+		cue.Docs(true),
+		cue.Attributes(true),
+		cue.Optional(true),
 		cue.Definitions(true),
 	}
 	var opts []format.Option
 	switch out {
 	case outputCUE:
-		if fn == functionEvalConcrete {
+		if fn != functionDef {
 			syn = append(syn, cue.Concrete(true))
 		}
 		opts = append(opts, format.TabIndent(true))
