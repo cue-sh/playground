@@ -23,23 +23,23 @@ package build
 // There
 
 // A File corresponds to a Go build.File.
-File :: {
+#File: {
 	filename:        string
-	encoding:        Encoding
-	interpretation?: Interpretation
-	form?:           Form
+	encoding:        #Encoding
+	interpretation?: #Interpretation
+	form?:           #Form
 	tags?: {[string]: string}
 }
 
 // Default is the file used for stdin and stdout. The settings depend
 // on the file mode.
-Default :: File & {
+#Default: #File & {
 	filename: *"-" | string
 }
 
 // A FileInfo defines how a file is encoded and interpreted.
-FileInfo :: {
-	File
+#FileInfo: {
+	#File
 
 	// For each of these fields it is explained what a true value means
 	// for encoding/decoding.
@@ -55,7 +55,7 @@ FileInfo :: {
 	imports:      bool          // don't expand/allow imports
 	stream:       bool          // permit streaming
 	docs:         bool          // show/allow docs
-	attributes:   true | *false // include/allow attributes
+	attributes:   bool          // include/allow attributes
 }
 
 // modes sets defaults for different operational modes.
@@ -68,27 +68,30 @@ modes: _
 // In input mode, settings flags are interpreted as what is allowed to occur
 // in the input. The default settings, therefore, tend to be permissive.
 modes: input: {
-	Default :: {
+	#Default: {
 		encoding: *"cue" | _
 		...
 	}
-
-	FileInfo :: x, x = {
-		docs: *true | false
+	#FileInfo: x, let x = {
+		docs:       *true | false
+		attributes: *true | false
 	}
 	encodings: cue: {
 		*forms.schema | _
 	}
+	extensions: ".json": interpretation: *"auto" | _
+	extensions: ".yaml": interpretation: *"auto" | _
+	extensions: ".yml": interpretation:  *"auto" | _
 }
 
 modes: export: {
-	Default :: {
+	#Default: {
 		encoding: *"json" | _
 		...
 	}
-
-	FileInfo :: x, x = {
-		docs: true | *false
+	#FileInfo: x, let x = {
+		docs:       true | *false
+		attributes: true | *false
 	}
 	encodings: cue: {
 		*forms.data | _
@@ -96,8 +99,9 @@ modes: export: {
 }
 
 modes: ouptut: {
-	FileInfo :: x, x = {
-		docs: true | *false
+	#FileInfo: x, let x = {
+		docs:       true | *false
+		attributes: true | *false
 	}
 	encodings: cue: {
 		*forms.data | _
@@ -106,12 +110,13 @@ modes: ouptut: {
 
 // eval is a legacy mode
 modes: eval: {
-	Default :: {
+	#Default: {
 		encoding: *"cue" | _
 		...
 	}
-	FileInfo :: x, x = {
-		docs: true | *false
+	#FileInfo: x, let x = {
+		docs:       true | *false
+		attributes: true | *false
 	}
 	encodings: cue: {
 		*forms.final | _
@@ -119,13 +124,13 @@ modes: eval: {
 }
 
 modes: def: {
-	Default :: {
+	#Default: {
 		encoding: *"cue" | _
 		...
 	}
-
-	FileInfo :: x, x = {
-		docs: *true | false
+	#FileInfo: x, let x = {
+		docs:       *true | false
+		attributes: *true | false
 	}
 	encodings: cue: {
 		*forms.schema | _
@@ -151,16 +156,15 @@ extensions: {
 }
 
 // A Encoding indicates a file format for representing a program.
-Encoding :: !="" // | error("no encoding specified")
+#Encoding: !="" // | error("no encoding specified")
 
 // An Interpretation determines how a certain program should be interpreted.
 // For instance, data may be interpreted as describing a schema, which itself
 // can be converted to a CUE schema.
-Interpretation :: string
+#Interpretation: string
+#Form:           string
 
-Form :: string
-
-file: FileInfo & {
+file: #FileInfo & {
 
 	filename: "foo.json"
 	form:     "schema"
@@ -175,15 +179,7 @@ tags: {
 
 	cue: encoding: "cue"
 
-	json: encoding: "json"
-	json: *{
-		form: *"" | "data"
-	} | {
-		form: *"schema" | "final"
-
-		interpretation: *"jsonschema" | _
-	}
-
+	json: encoding:  "json"
 	jsonl: encoding: "jsonl"
 	yaml: encoding:  "yaml"
 	proto: encoding: "proto"
@@ -204,6 +200,10 @@ tags: {
 		tags: lang: string
 	}
 
+	auto: {
+		interpretation: "auto"
+		encoding:       *"json" | _
+	}
 	jsonschema: {
 		interpretation: "jsonschema"
 		encoding:       *"json" | _
@@ -215,7 +215,7 @@ tags: {
 }
 
 // forms defines schema for all forms. It does not include the form ID.
-forms: [Name=string]: FileInfo
+forms: [Name=string]: #FileInfo
 
 forms: "": _
 
@@ -278,8 +278,9 @@ encodings: cue: {
 
 encodings: json: {
 	forms.data
-	stream: *false | true
-	docs:   false
+	stream:     *false | true
+	docs:       false
+	attributes: false
 }
 
 encodings: yaml: {
@@ -322,9 +323,13 @@ encodings: code: {
 	stream: false
 }
 
-interpretations: [Name=string]: FileInfo
+interpretations: [Name=string]: #FileInfo
 
 interpretations: "": _
+
+interpretations: auto: {
+	forms.schema
+}
 
 interpretations: jsonschema: {
 	forms.schema

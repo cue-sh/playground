@@ -7,6 +7,7 @@ import (
 
 	"cuelang.org/go/cue"
 	"cuelang.org/go/cue/ast"
+	"cuelang.org/go/cue/errors"
 	"cuelang.org/go/cue/format"
 	"cuelang.org/go/cue/load"
 	"cuelang.org/go/cue/token"
@@ -77,7 +78,9 @@ func handleCUECompile(in input, fn function, out output, inputVal string) (strin
 	}
 	f, err := filetypes.ParseFile(string(out)+":-", filetypes.Export)
 	if err != nil {
-		panic(err)
+		var buf bytes.Buffer
+		errors.Print(&buf, err, nil)
+		panic(fmt.Errorf("failed to parse file from %v: %s", string(out)+":-", buf.Bytes()))
 	}
 	var outBuf bytes.Buffer
 	encConf := &encoding.Config{

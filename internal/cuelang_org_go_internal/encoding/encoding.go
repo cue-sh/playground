@@ -37,75 +37,77 @@ import (
 	"cuelang.org/go/encoding/jsonschema"
 	"cuelang.org/go/encoding/openapi"
 	"cuelang.org/go/encoding/protobuf"
+	"github.com/cue-sh/playground/internal/cuelang_org_go_internal"
 	"github.com/cue-sh/playground/internal/cuelang_org_go_internal/filetypes"
 	"github.com/cue-sh/playground/internal/cuelang_org_go_internal/third_party/yaml"
+	"golang.org/x/text/encoding/unicode"
+	"golang.org/x/text/transform"
 )
 
 type Decoder struct {
-	cfg       *Config
-	closer    io.Closer
-	next      func() (ast.Expr, error)
-	interpret func(*cue.Instance) (file *ast.File, id string, err error)
-	expr      ast.Expr
-	file      *ast.File
-	filename  string // may change on iteration for some formats
-	id        string
-	index     int
-	err       error
+	cfg            *Config
+	closer         io.Closer
+	next           func() (ast.Expr, error)
+	interpretFunc  interpretFunc
+	interpretation build.Interpretation
+	expr           ast.Expr
+	file           *ast.File
+	filename       string // may change on iteration for some formats
+	id             string
+	index          int
+	err            error
 }
+
+type interpretFunc func(*cue.Instance) (file *ast.File, id string, err error)
 
 // ID returns a canonical identifier for the decoded object or "" if no such
 // identifier could be found.
 func (i *Decoder) ID() string {
 	return i.id
 }
-
 func (i *Decoder) Filename() string { return i.filename }
-func (i *Decoder) Index() int       { return i.index }
-func (i *Decoder) Done() bool       { return i.err != nil }
+
+// Interpretation returns the current interpretation detected by Detect.
+func (i *Decoder) Interpretation() build.Interpretation {
+	return i.interpretation
+}
+func (i *Decoder) Index() int { return i.index }
+func (i *Decoder) Done() bool { return i.err != nil }
 
 func (i *Decoder) Next() {
 	if i.err != nil {
 		return
 	}
 	// Decoder level
+	i.file = nil
 	i.expr, i.err = i.next()
 	i.index++
 	if i.err != nil {
 		return
 	}
+	i.doInterpret()
+}
+
+func (i *Decoder) doInterpret() {
 	// Interpretations
-	if i.interpret != nil {
+	if i.interpretFunc != nil {
 		var r cue.Runtime
-		inst, err := r.CompileFile(i.File())
+		i.file = i.File()
+		inst, err := r.CompileFile(i.file)
 		if err != nil {
 			i.err = err
 			return
 		}
-		i.file, i.id, i.err = i.interpret(inst)
+		i.file, i.id, i.err = i.interpretFunc(inst)
 	}
 }
 
 func toFile(x ast.Expr) *ast.File {
-	switch x := x.(type) {
-	case nil:
-		return nil
-	case *ast.StructLit:
-		return &ast.File{Decls: x.Elts}
-	default:
-		return &ast.File{Decls: []ast.Decl{&ast.EmbedDecl{Expr: x}}}
-	}
+	return internal.ToFile(x)
 }
 
 func valueToFile(v cue.Value) *ast.File {
-	switch x := v.Syntax().(type) {
-	case *ast.File:
-		return x
-	case ast.Expr:
-		return toFile(x)
-	default:
-		panic("unrreachable")
-	}
+	return internal.ToFile(v.Syntax())
 }
 
 func (i *Decoder) File() *ast.File {
@@ -137,12 +139,14 @@ type Config struct {
 	PkgName string // package name for files to generate
 
 	Force     bool // overwrite existing files.
+	Strict    bool
 	Stream    bool // will potentially write more than one document per file
 	AllErrors bool
 
 	EscapeHTML bool
 	ProtoPath  []string
 	Format     []format.Option
+	ParseFile  func(name string, src interface{}) (*ast.File, error)
 }
 
 // NewDecoder returns a stream of non-rooted data expressions. The encoding
@@ -167,42 +171,41 @@ func NewDecoder(f *build.File, cfg *Config) *Decoder {
 		return i
 	}
 
-	r, err := reader(f, cfg.Stdin)
-	i.closer = r
+	rc, err := reader(f, cfg.Stdin)
+	i.closer = rc
 	i.err = err
 	if err != nil {
 		return i
 	}
 
+	// For now we assume that all encodings require UTF-8. This will not be the
+	// case for some binary protocols. We need to exempt those explicitly here
+	// once we introduce them.
+	// TODO: this code also allows UTF16, which is too permissive for some
+	// encodings. Switch to unicode.UTF8Sig once available.
+	t := unicode.BOMOverride(unicode.UTF8.NewDecoder())
+	r := transform.NewReader(rc, t)
+
 	switch f.Interpretation {
 	case "":
+	case build.Auto:
+		openAPI := openAPIFunc(cfg, f)
+		jsonSchema := jsonSchemaFunc(cfg, f)
+		i.interpretFunc = func(inst *cue.Instance) (file *ast.File, id string, err error) {
+			switch i.interpretation = Detect(inst.Value()); i.interpretation {
+			case build.JSONSchema:
+				return jsonSchema(inst)
+			case build.OpenAPI:
+				return openAPI(inst)
+			}
+			return i.file, "", i.err
+		}
 	case build.OpenAPI:
-		i.interpret = func(i *cue.Instance) (file *ast.File, id string, err error) {
-			cfg := &openapi.Config{PkgName: cfg.PkgName}
-			file, err = simplify(openapi.Extract(i, cfg))
-			return file, "", err
-		}
+		i.interpretation = build.OpenAPI
+		i.interpretFunc = openAPIFunc(cfg, f)
 	case build.JSONSchema:
-		i.interpret = func(i *cue.Instance) (file *ast.File, id string, err error) {
-			id = f.Tags["id"]
-			if id == "" {
-				id, _ = i.Lookup("$id").String()
-			}
-			if id != "" {
-				u, err := url.Parse(id)
-				if err != nil {
-					return nil, "", errors.Wrapf(err, token.NoPos, "invalid id")
-				}
-				u.Scheme = ""
-				id = strings.TrimPrefix(u.String(), "//")
-			}
-			cfg := &jsonschema.Config{
-				ID:      id,
-				PkgName: cfg.PkgName,
-			}
-			file, err = simplify(jsonschema.Extract(i, cfg))
-			return file, id, err
-		}
+		i.interpretation = build.JSONSchema
+		i.interpretFunc = jsonSchemaFunc(cfg, f)
 	default:
 		i.err = fmt.Errorf("unsupported interpretation %q", f.Interpretation)
 	}
@@ -210,8 +213,15 @@ func NewDecoder(f *build.File, cfg *Config) *Decoder {
 	path := f.Filename
 	switch f.Encoding {
 	case build.CUE:
-		i.file, i.err = parser.ParseFile(path, r, parser.ParseComments)
+		if cfg.ParseFile == nil {
+			i.file, i.err = parser.ParseFile(path, r, parser.ParseComments)
+		} else {
+			i.file, i.err = cfg.ParseFile(path, r)
+		}
 		i.validate(i.file, f)
+		if i.err == nil {
+			i.doInterpret()
+		}
 	case build.JSON, build.JSONL:
 		i.next = json.NewDecoder(nil, path, r).Extract
 		i.Next()
@@ -235,6 +245,43 @@ func NewDecoder(f *build.File, cfg *Config) *Decoder {
 	}
 
 	return i
+}
+
+func jsonSchemaFunc(cfg *Config, f *build.File) interpretFunc {
+	return func(i *cue.Instance) (file *ast.File, id string, err error) {
+		id = f.Tags["id"]
+		if id == "" {
+			id, _ = i.Lookup("$id").String()
+		}
+		if id != "" {
+			u, err := url.Parse(id)
+			if err != nil {
+				return nil, "", errors.Wrapf(err, token.NoPos, "invalid id")
+			}
+			u.Scheme = ""
+			id = strings.TrimPrefix(u.String(), "//")
+		}
+		cfg := &jsonschema.Config{
+			ID:      id,
+			PkgName: cfg.PkgName,
+
+			Strict: cfg.Strict,
+		}
+		file, err = jsonschema.Extract(i, cfg)
+		// TODO: simplify currently erases file line info. Reintroduce after fix.
+		// file, err = simplify(file, err)
+		return file, id, err
+	}
+}
+
+func openAPIFunc(c *Config, f *build.File) interpretFunc {
+	cfg := &openapi.Config{PkgName: c.PkgName}
+	return func(i *cue.Instance) (file *ast.File, id string, err error) {
+		file, err = openapi.Extract(i, cfg)
+		// TODO: simplify currently erases file line info. Reintroduce after fix.
+		// file, err = simplify(file, err)
+		return file, "", err
+	}
 }
 
 func reader(f *build.File, stdin io.Reader) (io.ReadCloser, error) {
@@ -334,8 +381,9 @@ func (v *validator) validate(n ast.Node) bool {
 		check(n, i.Imports, "imports", true)
 
 	case *ast.Field:
-		check(n, i.Definitions, "definitions", x.Token == token.ISA)
-		check(n, i.Data, "regular fields", x.Token != token.ISA)
+		check(n, i.Definitions, "definitions",
+			x.Token == token.ISA || internal.IsDefinition(x.Label))
+		check(n, i.Data, "regular fields", internal.IsRegularField(x))
 		check(n, constraints, "optional fields", x.Optional != token.NoPos)
 
 		_, _, err := ast.LabelName(x.Label)
@@ -369,7 +417,7 @@ func (v *validator) validate(n ast.Node) bool {
 	case *ast.Ellipsis:
 		check(n, constraints, "ellipsis", true)
 
-	case *ast.Ident, *ast.SelectorExpr, *ast.Alias:
+	case *ast.Ident, *ast.SelectorExpr, *ast.Alias, *ast.LetClause:
 		check(n, i.References, "references", true)
 
 	default:
@@ -387,6 +435,8 @@ func simplify(f *ast.File, err error) (*ast.File, error) {
 	if err != nil {
 		return nil, err
 	}
+	// This needs to be a function that modifies f in order to maintain line
+	// number information.
 	b, err := format.Node(f, format.Simplify())
 	if err != nil {
 		return nil, err
