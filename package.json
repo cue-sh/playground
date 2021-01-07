@@ -10,7 +10,7 @@
 		"bootstrap": "^4.4.1",
 		"css-loader": "^3.4.2",
 		"file-loader": "^6.0.0",
-		"html-webpack-plugin": "^3.2.0",
+		"html-webpack-plugin": "^4.5.1",
 		"jquery": "^3.5.1",
 		"node-sass": "^4.14.1",
 		"popper.js": "^1.16.1",
@@ -23,7 +23,7 @@
 		"ts-loader": "^6.2.2",
 		"typescript": "^3.8.3",
 		"typescript-formatter": "^7.2.2",
-		"webpack": "^4.42.0",
+		"webpack": "^5.11.1",
 		"webpack-cli": "^3.3.11",
 		"webpack-dev-server": "^3.11.0",
 		"websocket-extensions": ">=0.1.4"
