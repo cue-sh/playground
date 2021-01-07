@@ -15,9 +15,11 @@
 package encoding
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -28,6 +30,7 @@ import (
 	"cuelang.org/go/cue/format"
 	"cuelang.org/go/cue/token"
 	"cuelang.org/go/encoding/openapi"
+	"github.com/cue-sh/playground/internal/cuelang_org_go_internal"
 	"github.com/cue-sh/playground/internal/cuelang_org_go_internal/filetypes"
 	"cuelang.org/go/pkg/encoding/yaml"
 )
@@ -36,29 +39,39 @@ import (
 // An Encoder allows
 type Encoder struct {
 	cfg          *Config
-	closer       io.Closer
+	close        func() error
 	interpret    func(*cue.Instance) (*ast.File, error)
 	encFile      func(*ast.File) error
 	encValue     func(cue.Value) error
 	autoSimplify bool
+	concrete     bool
+}
+
+// IsConcrete reports whether the output is required to be concrete.
+//
+// INTERNAL ONLY: this is just to work around a problem related to issue #553
+// of catching errors ony after syntax generation, dropping line number
+// information.
+func (e *Encoder) IsConcrete() bool {
+	return e.concrete
 }
 
 func (e Encoder) Close() error {
-	if e.closer == nil {
+	if e.close == nil {
 		return nil
 	}
-	return e.closer.Close()
+	return e.close()
 }
 
 // NewEncoder writes content to the file with the given specification.
 func NewEncoder(f *build.File, cfg *Config) (*Encoder, error) {
-	w, closer, err := writer(f, cfg)
+	w, close, err := writer(f, cfg)
 	if err != nil {
 		return nil, err
 	}
 	e := &Encoder{
-		cfg:    cfg,
-		closer: closer,
+		cfg:   cfg,
+		close: close,
 	}
 
 	switch f.Interpretation {
@@ -85,6 +98,7 @@ func NewEncoder(f *build.File, cfg *Config) (*Encoder, error) {
 		if err != nil {
 			return nil, err
 		}
+		e.concrete = !fi.Incomplete
 
 		synOpts := []cue.Option{}
 		if !fi.KeepDefaults || !fi.Incomplete {
@@ -119,7 +133,9 @@ func NewEncoder(f *build.File, cfg *Config) (*Encoder, error) {
 				opts = append(opts, format.Simplify())
 			}
 
-			b, err := format.Node(n, opts...)
+			// Casting an ast.Expr to an ast.File ensures that it always ends
+			// with a newline.
+			b, err := format.Node(internal.ToFile(n), opts...)
 			if err != nil {
 				return err
 			}
@@ -132,6 +148,7 @@ func NewEncoder(f *build.File, cfg *Config) (*Encoder, error) {
 		e.encFile = func(f *ast.File) error { return format(f.Filename, f) }
 
 	case build.JSON, build.JSONL:
+		e.concrete = true
 		d := json.NewEncoder(w)
 		d.SetIndent("", "    ")
 		d.SetEscapeHTML(cfg.EscapeHTML)
@@ -144,6 +161,7 @@ func NewEncoder(f *build.File, cfg *Config) (*Encoder, error) {
 		}
 
 	case build.YAML:
+		e.concrete = true
 		streamed := false
 		e.encValue = func(v cue.Value) error {
 			if streamed {
@@ -160,6 +178,7 @@ func NewEncoder(f *build.File, cfg *Config) (*Encoder, error) {
 		}
 
 	case build.Text:
+		e.concrete = true
 		e.encValue = func(v cue.Value) error {
 			s, err := v.String()
 			if err != nil {
@@ -194,6 +213,10 @@ func (e *Encoder) Encode(inst *cue.Instance) error {
 		}
 		return e.encodeFile(f, nil)
 	}
+	v := inst.Value()
+	if err := v.Validate(cue.Concrete(e.concrete)); err != nil {
+		return err
+	}
 	if e.encValue != nil {
 		return e.encValue(inst.Value())
 	}
@@ -213,10 +236,14 @@ func (e *Encoder) encodeFile(f *ast.File, interpret func(*cue.Instance) (*ast.Fi
 	if interpret != nil {
 		return e.Encode(inst)
 	}
+	v := inst.Value()
+	if err := v.Validate(cue.Concrete(e.concrete)); err != nil {
+		return err
+	}
 	return e.encValue(inst.Value())
 }
 
-func writer(f *build.File, cfg *Config) (io.Writer, io.Closer, error) {
+func writer(f *build.File, cfg *Config) (_ io.Writer, close func() error, err error) {
 	if cfg.Out != nil {
 		return cfg.Out, nil, nil
 	}
@@ -233,6 +260,11 @@ func writer(f *build.File, cfg *Config) (io.Writer, io.Closer, error) {
 				"error writing %q", path)
 		}
 	}
-	w, err := os.Create(path)
-	return w, w, err
+	// Delay opening the file until we can write it to completion. This will
+	// prevent clobbering the file in case of a crash.
+	b := &bytes.Buffer{}
+	fn := func() error {
+		return ioutil.WriteFile(path, b.Bytes(), 0644)
+	}
+	return b, fn, nil
 }

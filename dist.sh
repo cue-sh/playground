@@ -24,6 +24,15 @@ fi
 # cd to the directory containing the script
 cd "$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
+if [ "${BRANCH:-}" == "tip" ]
+then
+	 # We need to update our dependencies (as the main module)
+	 # to the tip of CUE
+	 go get cuelang.org/go@master
+	 ./_scripts/revendorToolsInternal.sh
+	 go generate ./...
+fi
+
 # Use the cache of playground node_modules
 mkdir -p $NETLIFY_BUILD_BASE/cache/playground_node_modules
 rsync -a $NETLIFY_BUILD_BASE/cache/playground_node_modules/ node_modules

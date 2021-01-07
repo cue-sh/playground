@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -eu
+set -eux
 
 go mod download
 cd $(git rev-parse --show-toplevel)
@@ -21,7 +21,7 @@ popd > /dev/null
 
 regex='s+cuelang.org/go/internal+github.com/cue-sh/playground/internal/cuelang_org_go_internal+g'
 
-for i in filetypes encoding third_party/yaml
+for i in "" filetypes encoding third_party/yaml
 do
 	rsync -a --relative --delete $td/$path@$version/internal/./$i/ ./internal/cuelang_org_go_internal/
 	find ./internal/cuelang_org_go_internal/$i -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} +
