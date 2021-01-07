@@ -29,8 +29,9 @@ then
 	 # We need to update our dependencies (as the main module)
 	 # to the tip of CUE
 	 go get cuelang.org/go@master
-	 ./_scripts/revendorToolsInternal.sh
-	 go generate ./...
+	 bash ./_scripts/revendorToolsInternal.sh
+	 go mod tidy
+	 go generate $(go list ./... | grep -v cuelang_org_go_internal)
 fi
 
 # Use the cache of playground node_modules
