@@ -152,7 +152,7 @@ export class App extends React.PureComponent<AppProps, AppState> {
 							<input style={{ display: (this.state.ShowSaveURL ? "" : "none") }} readOnly={true} className="form-control form-control-sm" id="shareURL" value={window.location.toString()} />
 						</div>
 					</div>
-					<div className="gap">{CUEVersion}</div>
+					<div className="gap"><a href="https://github.com/cue-sh/playground">{CUEVersion}</a></div>
 				</div>
 				<div className="left">
 					<div style={{ width: "100%", height: "100%" }} id="lhseditor"></div>
