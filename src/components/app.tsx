@@ -1,6 +1,8 @@
 import * as React from "react";
 import * as acemodule from "ace-builds";
 import { CUEVersion } from "./gen_cuelang_org_go_version";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faGithub } from '@fortawesome/free-brands-svg-icons';
 
 const editorFontSize = "11pt";
 
@@ -152,7 +154,7 @@ export class App extends React.PureComponent<AppProps, AppState> {
 							<input style={{ display: (this.state.ShowSaveURL ? "" : "none") }} readOnly={true} className="form-control form-control-sm" id="shareURL" value={window.location.toString()} />
 						</div>
 					</div>
-					<div className="gap"><a href="https://github.com/cue-sh/playground">{CUEVersion}</a></div>
+					<div className="gap"><a href={ "https://github.com/cuelang/cue/tree/"+CUEVersion}>{CUEVersion}</a> - <a href="https://github.com/cue-sh/playground"><FontAwesomeIcon icon={faGithub} /></a></div>
 				</div>
 				<div className="left">
 					<div style={{ width: "100%", height: "100%" }} id="lhseditor"></div>
