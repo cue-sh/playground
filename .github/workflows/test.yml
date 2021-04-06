@@ -2,6 +2,7 @@ on:
   push:
     branches:
       - master
+  repository_dispatch:
   pull_request:
     branches:
       - '**'
@@ -29,6 +30,11 @@ jobs:
           go-version: ${{ matrix.go-version }}
       - name: Checkout code
         uses: actions/checkout@v2
+      - name: Ensure latest CUE
+        # The latest git clean check ensures that this call is effectively
+        # side effect-free. Using GOPROXY=direct ensures we don't accidentally
+        # hit a stale cache in the proxy.
+        run: GOPROXY=direct go get -d cuelang.org/go@latest
       - name: Re-vendor
         run: ./_scripts/revendorToolsInternal.sh
       - name: Regenerate
