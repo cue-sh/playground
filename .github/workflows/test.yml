@@ -37,8 +37,6 @@ jobs:
         run: GOPROXY=direct go get -d cuelang.org/go@latest
       - name: Re-vendor
         run: ./_scripts/revendorToolsInternal.sh
-      - name: Break build
-        run: false
       - name: Regenerate
         run: go generate $(go list ./... | grep -v cuelang_org_go_internal)
       - name: Check module is tidy
