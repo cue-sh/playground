@@ -18,15 +18,39 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"cuelang.org/go/cue/errors"
 	"cuelang.org/go/cue/literal"
 	"cuelang.org/go/cue/token"
 )
 
+// AttrKind indicates the location of an attribute within CUE source.
+type AttrKind uint8
+
+const (
+	// FieldAttr indicates an attribute is a field attribute.
+	// foo: bar @attr()
+	FieldAttr AttrKind = 1 << iota
+
+	// DeclAttr indicates an attribute was specified at a declaration position.
+	// foo: {
+	//     @attr()
+	// }
+	DeclAttr
+
+	// TODO: Possible future attr kinds
+	// ElemAttr
+	// FileAttr
+	// ValueAttr = FieldAttr|DeclAttr|ElemAttr
+)
+
 // Attr holds positional information for a single Attr.
 type Attr struct {
-	Fields []keyValue
+	Name   string // e.g. "json" or "protobuf"
+	Body   string
+	Kind   AttrKind
+	Fields []KeyValue
 	Err    error
 }
 
@@ -36,14 +60,24 @@ func NewNonExisting(key string) Attr {
 	return Attr{Err: errors.Newf(token.NoPos, msgNotExist, key)}
 }
 
-type keyValue struct {
+type KeyValue struct {
 	data  string
 	equal int // index of equal sign or 0 if non-existing
 }
 
-func (kv *keyValue) Text() string { return kv.data }
-func (kv *keyValue) Key() string  { return kv.data[:kv.equal] }
-func (kv *keyValue) Value() string {
+func (kv *KeyValue) Text() string { return kv.data }
+func (kv *KeyValue) Key() string {
+	if kv.equal == 0 {
+		return kv.data
+	}
+	s := kv.data[:kv.equal]
+	s = strings.TrimSpace(s)
+	return s
+}
+func (kv *KeyValue) Value() string {
+	if kv.equal == 0 {
+		return ""
+	}
 	return strings.TrimSpace(kv.data[kv.equal+1:])
 }
 
@@ -109,8 +143,10 @@ func (a *Attr) Lookup(pos int, key string) (val string, found bool, err error) {
 }
 
 func ParseAttrBody(pos token.Pos, s string) (a Attr) {
+	a.Body = s
 	i := 0
 	for {
+		i += skipSpace(s[i:])
 		// always scan at least one, possibly empty element.
 		n, err := scanAttributeElem(pos, s[i:], &a)
 		if err != nil {
@@ -119,6 +155,7 @@ func ParseAttrBody(pos token.Pos, s string) (a Attr) {
 		if i += n; i >= len(s) {
 			break
 		}
+		i += skipSpace(s[i:])
 		if s[i] != ',' {
 			return Attr{Err: errors.Newf(pos, "invalid attribute: expected comma")}
 		}
@@ -127,24 +164,34 @@ func ParseAttrBody(pos token.Pos, s string) (a Attr) {
 	return a
 }
 
+func skipSpace(s string) int {
+	for n, r := range s {
+		if !unicode.IsSpace(r) {
+			return n
+		}
+	}
+	return 0
+}
+
 func scanAttributeElem(pos token.Pos, s string, a *Attr) (n int, err errors.Error) {
 	// try CUE string
-	kv := keyValue{}
+	kv := KeyValue{}
 	if n, kv.data, err = scanAttributeString(pos, s); n == 0 {
 		// try key-value pair
 		p := strings.IndexAny(s, ",=") // ) is assumed to be stripped.
 		switch {
 		case p < 0:
-			kv.data = s
+			kv.data = strings.TrimSpace(s)
 			n = len(s)
 
 		default: // ','
 			n = p
-			kv.data = s[:n]
+			kv.data = strings.TrimSpace(s[:n])
 
 		case s[p] == '=':
 			kv.equal = p
 			offset := p + 1
+			offset += skipSpace(s[offset:])
 			var str string
 			if p, str, err = scanAttributeString(pos, s[offset:]); p > 0 {
 				n = offset + p
@@ -154,7 +201,7 @@ func scanAttributeElem(pos token.Pos, s string, a *Attr) (n int, err errors.Erro
 				if p = strings.IndexByte(s[offset:], ','); p >= 0 {
 					n = offset + p
 				}
-				kv.data = s[:n]
+				kv.data = strings.TrimSpace(s[:n])
 			}
 		}
 	}
