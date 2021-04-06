@@ -29,6 +29,8 @@ jobs:
           go-version: ${{ matrix.go-version }}
       - name: Checkout code
         uses: actions/checkout@v2
+      - name: Re-vendor
+        run: ./_scripts/revendorToolsInternal.sh
       - name: Regenerate
         run: go generate $(go list ./... | grep -v cuelang_org_go_internal)
       - name: Check module is tidy
