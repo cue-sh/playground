@@ -50,6 +50,20 @@ ReactDOM.render(<App WasmAPI={window.WasmAPI} />, document.getElementById("root"
 
 // Now load and run the Go code which will register the Wasm API
 const go = new Go();
-WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject).then(result => {
-	go.run(result.instance);
-});
+
+const sourceFile = "main.wasm";
+
+// WebAssembly.instantiateStreaming() is preferred, but not all browsers support it
+if (typeof WebAssembly.instantiateStreaming === 'function') {
+    WebAssembly.instantiateStreaming(fetch(sourceFile), go.importObject).then(result => {
+        go.run(result.instance);
+    });
+} else {
+    fetch(sourceFile).then(response =>
+        response.arrayBuffer()
+    ).then(bytes =>
+        WebAssembly.instantiate(bytes, go.importObject)
+    ).then(result => {
+        go.run(result.instance);
+    });
+}
