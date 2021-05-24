@@ -139,20 +139,22 @@ modes: def: {
 
 // Extension maps file extensions to default file properties.
 extensions: {
-	"":        _
-	".cue":    tags.cue
-	".json":   tags.json
-	".jsonl":  tags.jsonl
-	".ldjson": tags.jsonl
-	".ndjson": tags.jsonl
-	".yaml":   tags.yaml
-	".yml":    tags.yaml
-	".txt":    tags.text
-	".go":     tags.go
-	".proto":  tags.proto
+	"":           _
+	".cue":       tags.cue
+	".json":      tags.json
+	".jsonl":     tags.jsonl
+	".ldjson":    tags.jsonl
+	".ndjson":    tags.jsonl
+	".yaml":      tags.yaml
+	".yml":       tags.yaml
+	".txt":       tags.text
+	".go":        tags.go
+	".proto":     tags.proto
+	".textproto": tags.textproto
+	".textpb":    tags.textproto // perhaps also pbtxt
+
 	// TODO: jsonseq,
-	// ".textproto": tags.textpb
-	// ".pb":        tags.binpb
+	// ".pb":        tags.binpb // binarypb
 }
 
 // A Encoding indicates a file format for representing a program.
@@ -179,14 +181,28 @@ tags: {
 
 	cue: encoding: "cue"
 
-	json: encoding:  "json"
-	jsonl: encoding: "jsonl"
-	yaml: encoding:  "yaml"
-	proto: encoding: "proto"
-	// "textpb": encodings.textproto
+	json: encoding:      "json"
+	jsonl: encoding:     "jsonl"
+	yaml: encoding:      "yaml"
+	proto: encoding:     "proto"
+	textproto: encoding: "textproto"
 	// "binpb":  encodings.binproto
+
+	// pb is used either to indicate binary encoding, or to indicate
+	pb: *{
+		encoding:       "binarypb"
+		interpretation: ""
+	} | {
+		encoding:       !="binarypb"
+		interpretation: "pb"
+	}
+
 	text: {
 		encoding: "text"
+		form:     "data"
+	}
+	binary: {
+		encoding: "binary"
 		form:     "data"
 	}
 	go: {
@@ -298,6 +314,11 @@ encodings: text: {
 	stream: false
 }
 
+encodings: binary: {
+	forms.data
+	stream: false
+}
+
 encodings: toml: {
 	forms.data
 	stream: false
@@ -308,10 +329,17 @@ encodings: proto: {
 	encoding: "proto"
 }
 
-// encodings: textproto: {
-//  forms.DataEncoding
-//  encoding: "textproto"
-// }
+encodings: textproto: {
+	forms.data
+	encoding: "textproto"
+	stream:   false
+}
+
+encodings: binarypb: {
+	forms.data
+	encoding: "binarypb"
+	stream:   false
+}
 
 // encodings: binproto: {
 //  forms.DataEncoding
@@ -339,4 +367,9 @@ interpretations: jsonschema: {
 interpretations: openapi: {
 	forms.schema
 	encoding: *"json" | _
+}
+
+interpretations: pb: {
+	forms.data
+	stream: true
 }

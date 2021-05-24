@@ -31,12 +31,15 @@ import (
 	"cuelang.org/go/cue/build"
 	"cuelang.org/go/cue/errors"
 	"cuelang.org/go/cue/format"
+	"cuelang.org/go/cue/literal"
 	"cuelang.org/go/cue/parser"
 	"cuelang.org/go/cue/token"
 	"cuelang.org/go/encoding/json"
 	"cuelang.org/go/encoding/jsonschema"
 	"cuelang.org/go/encoding/openapi"
 	"cuelang.org/go/encoding/protobuf"
+	"cuelang.org/go/encoding/protobuf/jsonpb"
+	"cuelang.org/go/encoding/protobuf/textproto"
 	"github.com/cue-sh/playground/internal/cuelang_org_go_internal"
 	"github.com/cue-sh/playground/internal/cuelang_org_go_internal/filetypes"
 	"github.com/cue-sh/playground/internal/cuelang_org_go_internal/third_party/yaml"
@@ -48,6 +51,7 @@ type Decoder struct {
 	cfg            *Config
 	closer         io.Closer
 	next           func() (ast.Expr, error)
+	rewriteFunc    rewriteFunc
 	interpretFunc  interpretFunc
 	interpretation build.Interpretation
 	expr           ast.Expr
@@ -59,6 +63,7 @@ type Decoder struct {
 }
 
 type interpretFunc func(*cue.Instance) (file *ast.File, id string, err error)
+type rewriteFunc func(*ast.File) (file *ast.File, err error)
 
 // ID returns a canonical identifier for the decoded object or "" if no such
 // identifier could be found.
@@ -89,7 +94,15 @@ func (i *Decoder) Next() {
 }
 
 func (i *Decoder) doInterpret() {
-	// Interpretations
+	if i.rewriteFunc != nil {
+		i.file = i.File()
+		var err error
+		i.file, err = i.rewriteFunc(i.file)
+		if err != nil {
+			i.err = err
+			return
+		}
+	}
 	if i.interpretFunc != nil {
 		var r cue.Runtime
 		i.file = i.File()
@@ -142,6 +155,8 @@ type Config struct {
 	Strict    bool
 	Stream    bool // will potentially write more than one document per file
 	AllErrors bool
+
+	Schema cue.Value // used for schema-based decoding
 
 	EscapeHTML bool
 	ProtoPath  []string
@@ -206,6 +221,9 @@ func NewDecoder(f *build.File, cfg *Config) *Decoder {
 	case build.JSONSchema:
 		i.interpretation = build.JSONSchema
 		i.interpretFunc = jsonSchemaFunc(cfg, f)
+	case build.ProtobufJSON:
+		i.interpretation = build.ProtobufJSON
+		i.rewriteFunc = protobufJSONFunc(cfg, f)
 	default:
 		i.err = fmt.Errorf("unsupported interpretation %q", f.Interpretation)
 	}
@@ -234,12 +252,24 @@ func NewDecoder(f *build.File, cfg *Config) *Decoder {
 		b, err := ioutil.ReadAll(r)
 		i.err = err
 		i.expr = ast.NewString(string(b))
+	case build.Binary:
+		b, err := ioutil.ReadAll(r)
+		i.err = err
+		s := literal.Bytes.WithTabIndent(1).Quote(string(b))
+		i.expr = ast.NewLit(token.STRING, s)
 	case build.Protobuf:
 		paths := &protobuf.Config{
 			Paths:   cfg.ProtoPath,
 			PkgName: cfg.PkgName,
 		}
 		i.file, i.err = protobuf.Extract(path, r, paths)
+	case build.TextProto:
+		b, err := ioutil.ReadAll(r)
+		i.err = err
+		if err == nil {
+			d := textproto.NewDecoder()
+			i.expr, i.err = d.Parse(cfg.Schema, path, b)
+		}
 	default:
 		i.err = fmt.Errorf("unsupported encoding %q", f.Encoding)
 	}
@@ -281,6 +311,16 @@ func openAPIFunc(c *Config, f *build.File) interpretFunc {
 		// TODO: simplify currently erases file line info. Reintroduce after fix.
 		// file, err = simplify(file, err)
 		return file, "", err
+	}
+}
+
+func protobufJSONFunc(cfg *Config, file *build.File) rewriteFunc {
+	return func(f *ast.File) (*ast.File, error) {
+		if !cfg.Schema.Exists() {
+			return f, errors.Newf(token.NoPos,
+				"no schema specified for protobuf interpretation.")
+		}
+		return f, jsonpb.NewDecoder(cfg.Schema).RewriteFile(f)
 	}
 }
 
@@ -410,8 +450,7 @@ func (v *validator) validate(n ast.Node) bool {
 		}
 
 	case *ast.BinaryExpr, *ast.ParenExpr, *ast.IndexExpr, *ast.SliceExpr,
-		*ast.CallExpr, *ast.Comprehension, *ast.ListComprehension,
-		*ast.Interpolation:
+		*ast.CallExpr, *ast.Comprehension, *ast.Interpolation:
 		check(n, constraints, "expressions", true)
 
 	case *ast.Ellipsis:

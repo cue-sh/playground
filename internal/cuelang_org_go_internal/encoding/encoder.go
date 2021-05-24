@@ -30,6 +30,8 @@ import (
 	"cuelang.org/go/cue/format"
 	"cuelang.org/go/cue/token"
 	"cuelang.org/go/encoding/openapi"
+	"cuelang.org/go/encoding/protobuf/jsonpb"
+	"cuelang.org/go/encoding/protobuf/textproto"
 	"github.com/cue-sh/playground/internal/cuelang_org_go_internal"
 	"github.com/cue-sh/playground/internal/cuelang_org_go_internal/filetypes"
 	"cuelang.org/go/pkg/encoding/yaml"
@@ -87,6 +89,12 @@ func NewEncoder(f *build.File, cfg *Config) (*Encoder, error) {
 			}
 			return openapi.Generate(i, cfg)
 		}
+	case build.ProtobufJSON:
+		e.interpret = func(v cue.Value) (*ast.File, error) {
+			f := valueToFile(v)
+			return f, jsonpb.NewEncoder(v).RewriteFile(f)
+		}
+
 	// case build.JSONSchema:
 	// 	// TODO: get encoding options
 	// 	cfg := openapi.Config{}
@@ -182,6 +190,20 @@ func NewEncoder(f *build.File, cfg *Config) (*Encoder, error) {
 			return err
 		}
 
+	case build.TextProto:
+		// TODO: verify that the schema is given. Otherwise err out.
+		e.concrete = true
+		e.encValue = func(v cue.Value) error {
+			v = v.Unify(cfg.Schema)
+			b, err := textproto.NewEncoder().Encode(v)
+			if err != nil {
+				return err
+			}
+
+			_, err = w.Write(b)
+			return err
+		}
+
 	case build.Text:
 		e.concrete = true
 		e.encValue = func(v cue.Value) error {
@@ -194,6 +216,17 @@ func NewEncoder(f *build.File, cfg *Config) (*Encoder, error) {
 				return err
 			}
 			_, err = fmt.Fprintln(w)
+			return err
+		}
+
+	case build.Binary:
+		e.concrete = true
+		e.encValue = func(v cue.Value) error {
+			b, err := v.Bytes()
+			if err != nil {
+				return err
+			}
+			_, err = w.Write(b)
 			return err
 		}
 
