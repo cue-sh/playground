@@ -34,7 +34,10 @@ jobs:
         # The latest git clean check ensures that this call is effectively
         # side effect-free. Using GOPROXY=direct ensures we don't accidentally
         # hit a stale cache in the proxy.
-        run: GOPROXY=direct go get -d cuelang.org/go@latest
+        #
+        # This command is effective latest pre-release version
+        run: |
+          GOPROXY=direct go get -d cuelang.org/go@$(GOPROXY=direct go list -m -versions cuelang.org/go | awk '{print $NF}')
       - name: Re-vendor
         run: ./_scripts/revendorToolsInternal.sh
       - name: Regenerate
