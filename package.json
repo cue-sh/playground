@@ -26,7 +26,11 @@
 		"webpack": "^5.11.1",
 		"webpack-cli": "^3.3.11",
 		"webpack-dev-server": "^3.11.0",
-		"websocket-extensions": ">=0.1.4"
+		"websocket-extensions": ">=0.1.4",
+		"@fortawesome/fontawesome-svg-core": "^1.2.34",
+		"@fortawesome/free-brands-svg-icons": "^5.15.2",
+		"@fortawesome/free-solid-svg-icons": "^5.15.2",
+		"@fortawesome/react-fontawesome": "^0.1.14"
 	},
 	"keywords": [],
 	"main": "index.js",
