@@ -42,6 +42,8 @@ jobs:
         run: ./_scripts/revendorToolsInternal.sh
       - name: Regenerate
         run: go generate $(go list ./... | grep -v cuelang_org_go_internal)
+      - run: npm install
+      - run: webpack --mode production
       - name: Check module is tidy
         run: go mod tidy
       - name: Verify commit is clean
