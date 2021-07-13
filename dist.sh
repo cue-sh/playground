@@ -42,7 +42,7 @@ npm rebuild node-sass
 rsync -a node_modules/ $NETLIFY_BUILD_BASE/cache/playground_node_modules
 
 # Dist
-echo "Install serverless functions to $GOBIN"
+echo "Install serverless functions"
 go install -tags netlify github.com/cue-sh/playground/functions/snippets
 
 echo "Building WASM backend"
