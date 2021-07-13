@@ -38,6 +38,7 @@ fi
 mkdir -p $NETLIFY_BUILD_BASE/cache/playground_node_modules
 rsync -a $NETLIFY_BUILD_BASE/cache/playground_node_modules/ node_modules
 npm install
+npm rebuild node-sass
 rsync -a node_modules/ $NETLIFY_BUILD_BASE/cache/playground_node_modules
 
 # Dist
