@@ -42,6 +42,8 @@ jobs:
         run: ./_scripts/revendorToolsInternal.sh
       - name: Regenerate
         run: go generate $(go list ./... | grep -v cuelang_org_go_internal)
+      - name: Test dist
+        run: NETLIFY=true NETLIFY_BUILD_BASE=$(mktemp -d) CUELANG_ORG_DIST=$(mktemp -d) bash dist.sh
       - name: Check module is tidy
         run: go mod tidy
       - name: Verify commit is clean
