@@ -21,7 +21,7 @@
 		"ts-loader": "^6.2.2",
 		"typescript": "^3.9.10",
 		"typescript-formatter": "^7.2.2",
-		"webpack": "^5.44.0",
+		"webpack": "^5.48.0",
 		"webpack-cli": "^4.7.2",
 		"webpack-dev-server": "^3.11.2",
 		"websocket-extensions": ">=0.1.4"
@@ -31,6 +31,6 @@
 	"name": "CUEplayground",
 	"scripts": {
 		"dist": "webpack --mode production",
-		"serve": "webpack-dev-server --mode development --open --hot"
+		"serve": "webpack serve --mode development --open --hot"
 	}
 }
