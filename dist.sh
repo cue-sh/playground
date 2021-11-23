@@ -17,14 +17,14 @@ set -eux
 
 if [ "${NETLIFY:-}" != "true" ]
 then
-	echo "Only intended to be run on Netlify"
-	exit 1
+	trap "trap - SIGTERM && kill -- -$$" SIGINT SIGTERM EXIT
+	echo "running in 'dev' mode"
 fi
 
 # cd to the directory containing the script
 cd "$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
-if [ "${BRANCH:-}" == "tip" ]
+if [ "${NETLIFY:-}" == "true" ] && [ "${BRANCH:-}" == "tip" ]
 then
 	 # We need to update our dependencies (as the main module)
 	 # to the tip of CUE
@@ -34,19 +34,42 @@ then
 	 go generate $(go list ./... | grep -v cuelang_org_go_internal)
 fi
 
-# Use the cache of playground node_modules
-mkdir -p $NETLIFY_BUILD_BASE/cache/playground_node_modules
-rsync -a $NETLIFY_BUILD_BASE/cache/playground_node_modules/ node_modules
-npm install
-npm rebuild node-sass
-rsync -a node_modules/ $NETLIFY_BUILD_BASE/cache/playground_node_modules
+if [ "${NETLIFY:-}" == "true" ]
+then
+	# Use the cache of playground node_modules
+	mkdir -p $NETLIFY_BUILD_BASE/cache/playground_node_modules
+	rsync -a $NETLIFY_BUILD_BASE/cache/playground_node_modules/ node_modules
+fi
 
-# Dist
-echo "Install serverless functions"
-go install -tags netlify github.com/cue-sh/playground/functions/snippets
+npm install
+
+if [ "${NETLIFY:-}" == "true" ]
+then
+	npm rebuild node-sass
+	rsync -a node_modules/ $NETLIFY_BUILD_BASE/cache/playground_node_modules
+fi
+
+if [ "${NETLIFY:-}" == "true" ]
+then
+	# Dist
+	echo "Install serverless functions"
+	go install -tags netlify github.com/cue-sh/playground/functions/snippets
+else
+	echo "Running serverless functions (background)"
+	go run github.com/cue-sh/playground/functions/snippets >/dev/null 2>&1 &
+fi
 
 echo "Building WASM backend"
 GOOS=js GOARCH=wasm go build -o main.wasm
+cp $(go env GOROOT)/misc/wasm/wasm_exec.js ./src
 
-echo "Running dist into $CUELANG_ORG_DIST"
-npm run dist
+
+if [ "${NETLIFY:-}" == "true" ]
+then
+	echo "Running dist into $CUELANG_ORG_DIST"
+	npm run dist
+else
+	echo "Running npm run serve"
+	npm run serve
+fi
+
