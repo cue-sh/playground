@@ -31,6 +31,6 @@
 	"name": "CUEplayground",
 	"scripts": {
 		"dist": "webpack --mode production",
-		"serve": "webpack serve --mode development --open --hot"
+		"serve": "webpack serve --mode development --open --hot --host 0.0.0.0"
 	}
 }

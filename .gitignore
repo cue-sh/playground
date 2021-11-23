@@ -1,3 +1,4 @@
 /_public
 /node_modules
+/src/wasm_exec.js
 *.wasm

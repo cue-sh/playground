@@ -25,18 +25,9 @@ The output is the JSON-marshalled result of the CUE input.
 To develop the application locally, within the `play` directory at the repo root:
 
 ```bash
-# Install required node dependencies
-npm install
-
-# Recompile Go application (see TODO below)
-GOOS=js GOARCH=wasm go build -o main.wasm
-
-# In one terminal run the snippet server
-go run github.com/cue-sh/playground/functions/snippets
-
-# In another terminal run the webpack server
-# (will open browser automatically)
-npm run serve
+# Running dist.sh outside of the netlify environment works in a "dev"
+# mode which ultimately results in running npm run serve
+./dist.sh
 ```
 
 ### Details
