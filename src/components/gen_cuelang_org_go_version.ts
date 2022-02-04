@@ -1,1 +1,1 @@
-export const CUEVersion = "v0.4.0";
+export const CUEVersion = "v0.4.2";
