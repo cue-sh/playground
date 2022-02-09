@@ -30,14 +30,6 @@ then
 	 # to the tip of CUE
 	 go get -d cuelang.org/go@master
 	 bash ./_scripts/revendorToolsInternal.sh
-
-	 # 2022-02-09 - at the time of writing CUE tip causes
-	 # a plain go mod tidy in the playground to fail because
-	 # go1.16 would select one version, and go1.17 another.
-	 # So we keep this extended form in place until we drop
-	 # support for go1.16
-	 go mod tidy -go=1.16 && go mod tidy -go=1.17
-
 	 go generate $(go list ./... | grep -v cuelang_org_go_internal)
 fi
 
