@@ -48,3 +48,5 @@ jobs:
         run: go mod tidy
       - name: Verify commit is clean
         run: test -z "$(git status --porcelain)" || (git status; git diff; false)
+      - name: Test dist at tip
+        run: NETLIFY=true NETLIFY_BUILD_BASE=$(mktemp -d) CUELANG_ORG_DIST=$(mktemp -d) BRANCH=tip bash dist.sh
