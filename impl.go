@@ -83,14 +83,17 @@ func handleCUECompile(in input, fn function, out output, inputVal string) (strin
 	if err := inst.Err; err != nil {
 		return "", fmt.Errorf("failed to build: %w", err)
 	}
-	v := insts[0].Value()
-	if err := v.Err(); err != nil {
-		return "", err
-	}
+	concrete := true
 	switch out {
-	case outputCUE, outputJSON, outputYaml:
+	case outputCUE:
+		concrete = false
+	case outputJSON, outputYaml:
 	default:
 		return "", fmt.Errorf("unknown ouput type: %v", out)
+	}
+	v := insts[0].Value()
+	if err := v.Validate(cue.Concrete(concrete)); err != nil {
+		return "", err
 	}
 	f, err := filetypes.ParseFile(string(out)+":-", filetypes.Export)
 	if err != nil {
