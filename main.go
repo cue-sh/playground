@@ -20,6 +20,8 @@ package main
 import (
 	"fmt"
 	"syscall/js"
+
+	"cuelang.org/go/cue/errors"
 )
 
 // TODO: for some reason recompiling the main.wasm file does not trigger
@@ -52,12 +54,19 @@ func cueCompile(this js.Value, args []js.Value) interface{} {
 	inVal := args[3].String()
 
 	val, err := handleCUECompile(in, fn, out, inVal)
-	var errStr string
-	if err != nil {
-		errStr = err.Error()
-	}
 	return map[string]interface{}{
 		"value": val,
-		"error": errStr,
+		"error": allErrors(err),
 	}
+}
+
+func allErrors(err error) string {
+	if err == nil {
+		return ""
+	}
+	var cueErr errors.Error
+	if !errors.As(err, &cueErr) {
+		return err.Error()
+	}
+	return errors.Details(cueErr, nil)
 }
