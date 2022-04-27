@@ -75,16 +75,18 @@ func handleCUECompile(in input, fn function, out output, inputVal string) (strin
 	}
 	builds := load.Instances([]string{string(in) + ":", "-"}, loadCfg)
 	if err := builds[0].Err; err != nil {
-		return "", fmt.Errorf("failed to load: %v", err)
+		return "", fmt.Errorf("failed to load: %w", err)
 	}
 
 	insts := cue.Build(builds)
 	inst := insts[0]
 	if err := inst.Err; err != nil {
-		return "", fmt.Errorf("failed to build: %v", err)
+		return "", fmt.Errorf("failed to build: %w", err)
 	}
 	v := insts[0].Value()
-
+	if err := v.Err(); err != nil {
+		return "", err
+	}
 	switch out {
 	case outputCUE, outputJSON, outputYaml:
 	default:
@@ -127,7 +129,7 @@ func handleCUECompile(in input, fn function, out output, inputVal string) (strin
 	encConf.Format = opts
 	synF := getSyntax(v, syn)
 	if err := e.EncodeFile(synF); err != nil {
-		return "", fmt.Errorf("failed to encode: %v", err)
+		return "", fmt.Errorf("failed to encode: %w", err)
 	}
 	return outBuf.String(), nil
 }
